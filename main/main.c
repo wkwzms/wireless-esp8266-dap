@@ -40,7 +40,7 @@
 extern void DAP_Setup(void);
 extern void DAP_Thread(void *argument);
 extern void SWO_Thread();
-
+extern uint8_t kState;
 TaskHandle_t kDAPTaskHandle = NULL;
 
 static const char *MDNS_TAG = "server_common";
