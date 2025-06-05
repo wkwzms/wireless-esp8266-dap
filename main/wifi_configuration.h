@@ -38,9 +38,9 @@ static struct {
 
 #define USE_OTA              0
 
-#define USE_UART_BRIDGE      1
+#define USE_UART_BRIDGE      0
 #define UART_BRIDGE_PORT     1234
-#define UART_BRIDGE_BAUDRATE 115200
+#define UART_BRIDGE_BAUDRATE 74880
 //
 
 // DO NOT CHANGE
