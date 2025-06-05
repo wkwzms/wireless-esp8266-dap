@@ -41,7 +41,9 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 
 #define PORT 3240
 #define EVENTS_QUEUE_SIZE 50
-
+#define ACCEPTING  0
+#define ATTACHING  1
+#define EMULATING  2
 #ifdef CALLBACK_DEBUG
 #define debug(s, ...) os_printf("%s: " s "\n", "Cb:", ##__VA_ARGS__)
 #else
