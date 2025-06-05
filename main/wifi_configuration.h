@@ -16,7 +16,7 @@ static struct {
     const char *password;
 } wifi_list[] __attribute__((unused)) = {
     {.ssid = "OTA", .password = "12345678"},
-    {.ssid = "DAP", .password = "123456789"},
+    {.ssid = "DAP", .password = "12345678"},
     // Add your WAP like this:
     // {.ssid = "your ssid", .password = "your password"},
 };
@@ -25,7 +25,7 @@ static struct {
 
 #define USE_MDNS       1
 // Use the address "dap.local" to access the device
-#define MDNS_HOSTNAME "dap"
+#define MDNS_HOSTNAME "dap.local"
 #define MDNS_INSTANCE "DAP mDNS"
 //
 
@@ -40,7 +40,7 @@ static struct {
 
 #define USE_UART_BRIDGE      1
 #define UART_BRIDGE_PORT     1234
-#define UART_BRIDGE_BAUDRATE 74880
+#define UART_BRIDGE_BAUDRATE 115200
 //
 
 // DO NOT CHANGE
