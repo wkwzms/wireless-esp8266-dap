@@ -32,6 +32,8 @@ static void send_device_list();
 static void send_device_info();
 static void send_interface_info();
 
+static int attach(uint8_t *buffer, uint32_t length);
+
 // emulate helper function
 static void pack(void *data, int size);
 static void unpack(void *data, int size);
