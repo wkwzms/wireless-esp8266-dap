@@ -5,5 +5,7 @@
 
 int tcp_netconn_send(const void *buffer, size_t len);
 void tcp_netconn_task();
+void attach(uint8_t *buffer, uint16_t  len);
+void emulate(uint8_t *buffer, uint16_t  len);
 
 #endif
