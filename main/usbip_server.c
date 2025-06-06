@@ -32,7 +32,7 @@ static void send_device_list();
 static void send_device_info();
 static void send_interface_info();
 
-static int attach(uint8_t *buffer, uint32_t length);
+
 
 // emulate helper function
 static void pack(void *data, int size);
@@ -52,7 +52,7 @@ int usbip_network_send(int s, const void *dataptr, size_t size, int flags) {
 #endif
 }
 
-static int attach(uint8_t *buffer, uint32_t length)
+ int attach(uint8_t *buffer, uint32_t length)
 {
     int command = read_stage1_command(buffer, length);
     if (command < 0)
