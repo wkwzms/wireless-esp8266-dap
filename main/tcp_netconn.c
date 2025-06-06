@@ -49,8 +49,7 @@ THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND 
 #else
 #define debug(s, ...)
 #endif
-static int attach(uint8_t *buffer, uint32_t length);
-static int emulate(uint8_t *buffer, uint32_t length);
+
 QueueHandle_t xQueue_events;
 typedef struct
 {
