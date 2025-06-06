@@ -36,7 +36,7 @@ extern TaskHandle_t kDAPTaskHandle;
 extern int kRestartDAPHandle;
 
 int kSock = -1;
-
+uint8_t kState = ACCEPTING;
 void tcp_server_task(void *pvParameters)
 {
     uint8_t tcp_rx_buffer[1500] = {0};
