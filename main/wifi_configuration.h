@@ -38,13 +38,13 @@ static struct {
 
 #define USE_OTA              0
 
-#define USE_UART_BRIDGE      0
+#define USE_UART_BRIDGE      1
 #define UART_BRIDGE_PORT     1234
-#define UART_BRIDGE_BAUDRATE 74880
+#define UART_BRIDGE_BAUDRATE 115200
 //
 
 // DO NOT CHANGE
-#define USE_TCP_NETCONN 0
+#define USE_TCP_NETCONN 1
 
 #define PORT                3240
 #define CONFIG_EXAMPLE_IPV4 1
