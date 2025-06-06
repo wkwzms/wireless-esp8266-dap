@@ -19,5 +19,5 @@ void send_stage2_submit_data(usbip_stage2_header *req_header, int32_t status, co
 void send_stage2_submit(usbip_stage2_header *req_header, int32_t status, int32_t data_length);
 void send_stage2_submit_data_fast(usbip_stage2_header *req_header, const void *const data, int32_t data_length);
 int usbip_network_send(int s, const void *dataptr, size_t size, int flags);
-
+ int attach(uint8_t *buffer, uint32_t length);
 #endif
