@@ -14,7 +14,7 @@
 #include "freertos/event_groups.h"
 #include "esp_system.h"
 #include "esp_wifi.h"
-#include "esp_event.h"
+#include "esp_event_loop.h"
 #include "esp_log.h"
 
 #ifdef CONFIG_IDF_TARGET_ESP8266
@@ -23,8 +23,6 @@
     #define PIN_LED_WIFI_STATUS 27
 #elif defined CONFIG_IDF_TARGET_ESP32C3
     #define PIN_LED_WIFI_STATUS 10
-#elif defined CONFIG_IDF_TARGET_ESP32S3
-    #define PIN_LED_WIFI_STATUS 4
 #else
     #error unknown hardware
 #endif

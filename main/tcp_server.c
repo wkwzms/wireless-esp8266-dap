@@ -13,7 +13,6 @@
 
 #include "main/wifi_configuration.h"
 #include "main/usbip_server.h"
-#include "main/websocket_server.h"
 #include "main/DAP_handle.h"
 
 #include "components/elaphureLink/elaphureLink_protocol.h"
@@ -23,7 +22,7 @@
 #include "freertos/event_groups.h"
 #include "esp_system.h"
 #include "esp_wifi.h"
-#include "esp_event.h"
+#include "esp_event_loop.h"
 #include "esp_log.h"
 #include "nvs_flash.h"
 
@@ -35,18 +34,15 @@
 extern TaskHandle_t kDAPTaskHandle;
 extern int kRestartDAPHandle;
 
-int kSock = -1;
 uint8_t kState = ACCEPTING;
+int kSock = -1;
+
 void tcp_server_task(void *pvParameters)
 {
-    uint8_t tcp_rx_buffer[1500] = {0};
+    uint8_t tcp_rx_buffer[1500];
     char addr_str[128];
-    enum usbip_server_state_t usbip_state = WAIT_DEVLIST;
-    uint8_t *data;
     int addr_family;
     int ip_protocol;
-    int header;
-    int ret, sz;
 
     int on = 1;
     while (1)
@@ -115,43 +111,75 @@ void tcp_server_task(void *pvParameters)
             setsockopt(kSock, IPPROTO_TCP, TCP_NODELAY, (void *)&on, sizeof(on));
             os_printf("Socket accepted\r\n");
 
-            // Read header
-            sz = 4;
-            data = &tcp_rx_buffer[0];
-            do {
-                ret = recv(kSock, data, sz, 0);
-                if (ret <= 0)
-                    goto cleanup;
-                sz -= ret;
-                data += ret;
-            } while (sz > 0);
-
-            header = *((int *)(tcp_rx_buffer));
-            header = ntohl(header);
-
-            if (header == EL_LINK_IDENTIFIER) {
-                el_dap_work(tcp_rx_buffer, sizeof(tcp_rx_buffer));
-            } else if ((header & 0xFFFF) == 0x8003 ||
-                       (header & 0xFFFF) == 0x8005) { // usbip OP_REQ_DEVLIST/OP_REQ_IMPORT
-                if ((header & 0xFFFF) == 0x8005)
-                    usbip_state = WAIT_DEVLIST;
+            while (1)
+            {
+                int len = recv(kSock, tcp_rx_buffer, sizeof(tcp_rx_buffer), 0);
+                // Error occured during receiving
+                if (len < 0)
+                {
+                    os_printf("recv failed: errno %d\r\n", errno);
+                    break;
+                }
+                // Connection closed
+                else if (len == 0)
+                {
+                    os_printf("Connection closed\r\n");
+                    break;
+                }
+                // Data received
                 else
-                    usbip_state = WAIT_IMPORT;
-                usbip_worker(tcp_rx_buffer, sizeof(tcp_rx_buffer), &usbip_state);
-            } else if (header == 0x47455420) { // string "GET "
-#ifdef CONFIG_USE_WEBSOCKET_DAP
-                websocket_worker(kSock, tcp_rx_buffer, sizeof(tcp_rx_buffer));
-#endif
-            } else {
-                os_printf("Unknown protocol\n");
-            }
+                {
+                    // #ifdef CONFIG_EXAMPLE_IPV6
+                    //                     // Get the sender's ip address as string
+                    //                     if (sourceAddr.sin6_family == PF_INET)
+                    //                     {
+                    //                         inet_ntoa_r(((struct sockaddr_in *)&sourceAddr)->sin_addr.s_addr, addr_str, sizeof(addr_str) - 1);
+                    //                     }
+                    //                     else if (sourceAddr.sin6_family == PF_INET6)
+                    //                     {
+                    //                         inet6_ntoa_r(sourceAddr.sin6_addr, addr_str, sizeof(addr_str) - 1);
+                    //                     }
+                    // #else
+                    //                     inet_ntoa_r(((struct sockaddr_in *)&sourceAddr)->sin_addr.s_addr, addr_str, sizeof(addr_str) - 1);
+                    // #endif
 
-cleanup:
+                    switch (kState)
+                    {
+                    case ACCEPTING:
+                        kState = ATTACHING;
+
+                    case ATTACHING:
+                        // elaphureLink handshake
+                        if (el_handshake_process(kSock, tcp_rx_buffer, len) == 0) {
+                            // handshake successed
+                            kState = EL_DATA_PHASE;
+                            kRestartDAPHandle = DELETE_HANDLE;
+                            el_process_buffer_malloc();
+                            break;
+                        }
+
+                        attach(tcp_rx_buffer, len);
+                        break;
+
+                    case EMULATING:
+                        emulate(tcp_rx_buffer, len);
+                        break;
+                    case EL_DATA_PHASE:
+                        el_dap_data_process(tcp_rx_buffer, len);
+                        break;
+                    default:
+                        os_printf("unkonw kstate!\r\n");
+                    }
+                }
+            }
+            // kState = ACCEPTING;
             if (kSock != -1)
             {
                 os_printf("Shutting down socket and restarting...\r\n");
                 //shutdown(kSock, 0);
                 close(kSock);
+                if (kState == EMULATING || kState == EL_DATA_PHASE)
+                    kState = ACCEPTING;
 
                 // Restart DAP Handle
                 el_process_buffer_free();

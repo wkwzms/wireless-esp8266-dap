@@ -111,7 +111,7 @@ void handle_dap_data_request(usbip_stage2_header *header, uint32_t length)
     // Point to the beginning of the URB packet
 
 #if (USE_WINUSB == 1)
-    send_stage2_submit_data_fast(header, NULL, 0);
+    send_stage2_submit(header, 0, 0);
 
     // always send constant size buf -> cuz we don't care about the IN packet size
     // and to unify the style, we set aside the length of the section
@@ -119,7 +119,7 @@ void handle_dap_data_request(usbip_stage2_header *header, uint32_t length)
     xTaskNotifyGive(kDAPTaskHandle);
 
 #else
-    send_stage2_submit_data_fast(header, NULL, 0);
+    send_stage2_submit(header, 0, 0);
 
     xRingbufferSend(dap_dataIN_handle, data_in, DAP_HANDLE_SIZE, portMAX_DELAY);
     xTaskNotifyGive(kDAPTaskHandle);
@@ -129,6 +129,22 @@ void handle_dap_data_request(usbip_stage2_header *header, uint32_t length)
     // dap_respond = DAP_ProcessCommand((uint8_t *)data_in, (uint8_t *)data_out);
     // //handle_dap_data_response(header);
     // send_stage2_submit(header, 0, 0);
+}
+
+void handle_dap_data_response(usbip_stage2_header *header)
+{
+    return;
+    // int resLength = dap_respond & 0xFFFF;
+    // if (resLength)
+    // {
+
+    //     send_stage2_submit_data(header, 0, (void *)DAPDataProcessed.buf, resLength);
+    //     dap_respond = 0;
+    // }
+    // else
+    // {
+    //     send_stage2_submit(header, 0, 0);
+    // }
 }
 
 void handle_swo_trace_response(usbip_stage2_header *header)
@@ -295,6 +311,7 @@ int fast_reply(uint8_t *buf, uint32_t length)
     }
     return 0;
 }
+
 void handle_dap_unlink()
 {
     // `USBIP_CMD_UNLINK` means calling `usb_unlink_urb()` or `usb_kill_urb()`.
