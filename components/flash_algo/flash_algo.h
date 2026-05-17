@@ -20,8 +20,18 @@ extern "C" {
 typedef enum {
     TARGET_STM32F1_MD,      /* STM32F103 中等密度 (64/128KB Flash) */
     TARGET_STM32F1_HD,      /* STM32F103 高密度 (256/512KB Flash) */
+    TARGET_GD32F1_XD,       /* GD32F1 large-density compatible parts */
+    TARGET_STM32F4_256K,    /* STM32F4 / compatible, 256KB class */
+    TARGET_STM32F4_512K,    /* STM32F4 / compatible, 512KB class */
+    TARGET_STM32F4_1024K,   /* STM32F4 / compatible, 1MB class */
+    TARGET_STM32F4_2048K,   /* STM32F4 / compatible, 2MB class */
     TARGET_UNKNOWN,
 } target_chip_t;
+
+typedef enum {
+    FLASH_METHOD_RAM_BLOB,
+    FLASH_METHOD_STM32F4_REG,
+} flash_method_t;
 
 /**
  * @brief Detect target chip from SWD IDCODE.
@@ -41,6 +51,11 @@ const program_target_t *flash_algo_get(target_chip_t chip);
  * @return pointer to target_cfg_t, or NULL if not supported
  */
 const target_cfg_t *flash_algo_get_target_config(target_chip_t chip);
+
+/**
+ * @brief Get programming method for a target chip.
+ */
+flash_method_t flash_algo_get_method(target_chip_t chip);
 
 /**
  * @brief Get human-readable name for a target chip.

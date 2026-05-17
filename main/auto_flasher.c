@@ -49,6 +49,21 @@ static target_chip_t   s_target_chip   = TARGET_UNKNOWN;
 #define STM32_DBGMCU_IDCODE  0xE0042000UL
 #define STM32F1_FLASH_SIZE_KB 0x1FFFF7E0UL
 
+#define STM32F4_FLASH_BASE   0x40023C00UL
+#define STM32F4_FLASH_KEYR   (STM32F4_FLASH_BASE + 0x04UL)
+#define STM32F4_FLASH_SR     (STM32F4_FLASH_BASE + 0x0CUL)
+#define STM32F4_FLASH_CR     (STM32F4_FLASH_BASE + 0x10UL)
+#define STM32F4_KEY1         0x45670123UL
+#define STM32F4_KEY2         0xCDEF89ABUL
+#define STM32F4_SR_EOP       (1UL << 0)
+#define STM32F4_SR_ERRS      ((1UL << 1) | (1UL << 4) | (1UL << 5) | (1UL << 6) | (1UL << 7))
+#define STM32F4_SR_BSY       (1UL << 16)
+#define STM32F4_CR_PG        (1UL << 0)
+#define STM32F4_CR_SER       (1UL << 1)
+#define STM32F4_CR_STRT      (1UL << 16)
+#define STM32F4_CR_LOCK      (1UL << 31)
+#define STM32F4_PSIZE_WORD   (2UL << 8)
+
 static target_chip_t detect_target_chip(uint32_t dp_idcode) {
     uint32_t dbgmcu_id = 0;
     uint32_t flash_kb = 0;
@@ -73,6 +88,19 @@ static target_chip_t detect_target_chip(uint32_t dp_idcode) {
                 return TARGET_STM32F1_MD;
             case 0x414:
                 return TARGET_STM32F1_HD;
+            case 0x430:
+                return TARGET_GD32F1_XD;
+            case 0x423:
+            case 0x433:
+                return TARGET_STM32F4_256K;
+            case 0x421:
+            case 0x431:
+                return TARGET_STM32F4_512K;
+            case 0x413:
+                return TARGET_STM32F4_1024K;
+            case 0x419:
+            case 0x434:
+                return TARGET_STM32F4_2048K;
             default:
                 break;
         }
@@ -151,11 +179,248 @@ static int target_connect(void) {
     return (s_target_chip != TARGET_UNKNOWN);
 }
 
+static int verify_target_flash(uint32_t flash_start, size_t fw_size, uint32_t page_size) {
+    uint8_t *verify_buf = (uint8_t *)malloc(page_size);
+    uint8_t *source_buf = (uint8_t *)malloc(page_size);
+    size_t offset = 0;
+
+    if (verify_buf == NULL || source_buf == NULL) {
+        if (verify_buf) free(verify_buf);
+        if (source_buf) free(source_buf);
+        snprintf(s_flash_status.last_error, sizeof(s_flash_status.last_error),
+                 "Out of memory during verify");
+        return 0;
+    }
+
+    while (offset < fw_size) {
+        size_t chunk = fw_size - offset;
+        if (chunk > page_size) chunk = page_size;
+
+        if (fs_read(offset, source_buf, chunk) != ESP_OK) {
+            snprintf(s_flash_status.last_error, sizeof(s_flash_status.last_error),
+                     "Failed to read firmware during verify");
+            free(verify_buf);
+            free(source_buf);
+            return 0;
+        }
+        if (!swd_read_memory(flash_start + offset, verify_buf, chunk)) {
+            snprintf(s_flash_status.last_error, sizeof(s_flash_status.last_error),
+                     "Failed to read target flash at offset %u", (unsigned int)offset);
+            free(verify_buf);
+            free(source_buf);
+            return 0;
+        }
+        if (memcmp(source_buf, verify_buf, chunk) != 0) {
+            snprintf(s_flash_status.last_error, sizeof(s_flash_status.last_error),
+                     "Verification failed at offset %u", (unsigned int)offset);
+            free(verify_buf);
+            free(source_buf);
+            return 0;
+        }
+        offset += chunk;
+    }
+
+    free(verify_buf);
+    free(source_buf);
+    return 1;
+}
+
+static int stm32f4_wait_ready(void) {
+    uint32_t sr = 0;
+    for (uint32_t i = 0; i < 200000; i++) {
+        if (!swd_read_word(STM32F4_FLASH_SR, &sr)) {
+            return 0;
+        }
+        if ((sr & STM32F4_SR_BSY) == 0) {
+            return ((sr & STM32F4_SR_ERRS) == 0);
+        }
+        if ((i & 0x3FFU) == 0) {
+            vTaskDelay(pdMS_TO_TICKS(1));
+        }
+    }
+    return 0;
+}
+
+static int stm32f4_unlock(void) {
+    uint32_t cr = 0;
+
+    if (!swd_read_word(STM32F4_FLASH_CR, &cr)) {
+        return 0;
+    }
+    if ((cr & STM32F4_CR_LOCK) == 0) {
+        return 1;
+    }
+    if (!swd_write_word(STM32F4_FLASH_KEYR, STM32F4_KEY1)) {
+        return 0;
+    }
+    if (!swd_write_word(STM32F4_FLASH_KEYR, STM32F4_KEY2)) {
+        return 0;
+    }
+    if (!swd_read_word(STM32F4_FLASH_CR, &cr)) {
+        return 0;
+    }
+    return ((cr & STM32F4_CR_LOCK) == 0);
+}
+
+static int stm32f4_sector_from_addr(uint32_t address) {
+    uint32_t offset = address - 0x08000000UL;
+    uint32_t bank = offset / 0x00100000UL;
+    uint32_t bank_offset = offset % 0x00100000UL;
+    uint32_t sector;
+
+    if (bank_offset < 0x00010000UL) {
+        sector = bank_offset / 0x4000UL;
+    } else if (bank_offset < 0x00020000UL) {
+        sector = 4;
+    } else {
+        sector = 5 + ((bank_offset - 0x00020000UL) / 0x20000UL);
+    }
+    return (int)(bank * 12UL + sector);
+}
+
+static uint32_t stm32f4_sector_start(int sector) {
+    uint32_t bank = (uint32_t)sector / 12UL;
+    uint32_t local = (uint32_t)sector % 12UL;
+    uint32_t base = 0x08000000UL + bank * 0x00100000UL;
+
+    if (local < 4) {
+        return base + local * 0x4000UL;
+    }
+    if (local == 4) {
+        return base + 0x00010000UL;
+    }
+    return base + 0x00020000UL + (local - 5UL) * 0x20000UL;
+}
+
+static int stm32f4_erase_range(uint32_t flash_start, size_t fw_size) {
+    int first_sector = stm32f4_sector_from_addr(flash_start);
+    int last_sector = stm32f4_sector_from_addr(flash_start + (uint32_t)fw_size - 1UL);
+
+    s_flash_status.state = FLASH_STATE_ERASING;
+    s_flash_status.state_name = "Erasing sectors";
+
+    for (int sector = first_sector; sector <= last_sector; sector++) {
+        uint32_t cr = STM32F4_CR_SER | ((uint32_t)sector << 3) | STM32F4_PSIZE_WORD | STM32F4_CR_STRT;
+        if (!swd_write_word(STM32F4_FLASH_SR, STM32F4_SR_EOP | STM32F4_SR_ERRS)) {
+            return 0;
+        }
+        if (!swd_write_word(STM32F4_FLASH_CR, cr)) {
+            return 0;
+        }
+        if (!stm32f4_wait_ready()) {
+            snprintf(s_flash_status.last_error, sizeof(s_flash_status.last_error),
+                     "Sector erase failed at 0x%08lX", (unsigned long)stm32f4_sector_start(sector));
+            return 0;
+        }
+    }
+
+    return swd_write_word(STM32F4_FLASH_CR, 0);
+}
+
+static int stm32f4_program_range(uint32_t flash_start, size_t fw_size) {
+    uint8_t *page_buf = (uint8_t *)malloc(FLASH_PAGE_BUF_SIZE);
+    size_t offset = 0;
+
+    if (page_buf == NULL) {
+        snprintf(s_flash_status.last_error, sizeof(s_flash_status.last_error),
+                 "Out of memory");
+        return 0;
+    }
+
+    s_flash_status.state = FLASH_STATE_PROGRAMMING;
+    s_flash_status.state_name = "Programming";
+    s_flash_status.total_bytes = fw_size;
+    s_flash_status.current_bytes = 0;
+
+    if (!swd_write_word(STM32F4_FLASH_CR, STM32F4_CR_PG | STM32F4_PSIZE_WORD)) {
+        free(page_buf);
+        return 0;
+    }
+
+    while (offset < fw_size) {
+        size_t chunk = fw_size - offset;
+        if (chunk > FLASH_PAGE_BUF_SIZE) chunk = FLASH_PAGE_BUF_SIZE;
+
+        memset(page_buf, 0xFF, FLASH_PAGE_BUF_SIZE);
+        if (fs_read(offset, page_buf, chunk) != ESP_OK) {
+            snprintf(s_flash_status.last_error, sizeof(s_flash_status.last_error),
+                     "Failed to read firmware from ESP flash");
+            free(page_buf);
+            return 0;
+        }
+
+        for (size_t i = 0; i < chunk; i += 4) {
+            uint32_t word = 0xFFFFFFFFUL;
+            size_t remain = chunk - i;
+            if (remain > 4) remain = 4;
+            memcpy(&word, page_buf + i, remain);
+
+            if (!swd_write_word(flash_start + (uint32_t)offset + (uint32_t)i, word)) {
+                snprintf(s_flash_status.last_error, sizeof(s_flash_status.last_error),
+                         "Program word failed at offset %u", (unsigned int)(offset + i));
+                free(page_buf);
+                return 0;
+            }
+            if (!stm32f4_wait_ready()) {
+                snprintf(s_flash_status.last_error, sizeof(s_flash_status.last_error),
+                         "Flash busy/error at offset %u", (unsigned int)(offset + i));
+                free(page_buf);
+                return 0;
+            }
+        }
+
+        offset += chunk;
+        s_flash_status.current_bytes = offset;
+        vTaskDelay(pdMS_TO_TICKS(1));
+    }
+
+    free(page_buf);
+    return swd_write_word(STM32F4_FLASH_CR, 0);
+}
+
+static int flash_execute_stm32f4_reg(uint32_t flash_start, size_t fw_size) {
+    os_printf("[AUTO_FLASH] Using STM32F4/GD32F4 register flash path\n");
+
+    if (!stm32f4_unlock()) {
+        snprintf(s_flash_status.last_error, sizeof(s_flash_status.last_error),
+                 "Failed to unlock STM32F4/GD32F4 flash");
+        goto fail;
+    }
+    if (!stm32f4_erase_range(flash_start, fw_size)) {
+        goto fail;
+    }
+    if (!stm32f4_program_range(flash_start, fw_size)) {
+        goto fail;
+    }
+
+    s_flash_status.state = FLASH_STATE_VERIFYING;
+    s_flash_status.state_name = "Verifying";
+    if (!verify_target_flash(flash_start, fw_size, FLASH_PAGE_BUF_SIZE)) {
+        goto fail;
+    }
+
+    swd_write_word(STM32F4_FLASH_CR, STM32F4_CR_LOCK);
+    swd_off();
+    s_flash_status.state = FLASH_STATE_DONE;
+    s_flash_status.state_name = "Flash complete (reset target manually)";
+    s_done_idcode = s_target_idcode;
+    os_printf("[AUTO_FLASH] Flash verified successfully; reset target manually to boot\n");
+    return 1;
+
+fail:
+    swd_write_word(STM32F4_FLASH_CR, STM32F4_CR_LOCK);
+    s_flash_status.state = FLASH_STATE_FAILED;
+    s_flash_status.state_name = "Failed";
+    s_flash_status.error_count++;
+    return 0;
+}
+
 static int flash_execute(void) {
+    flash_method_t method = flash_algo_get_method(s_target_chip);
     const program_target_t *algo = flash_algo_get(s_target_chip);
     const target_cfg_t *tgt = flash_algo_get_target_config(s_target_chip);
 
-    if (algo == NULL || tgt == NULL) {
+    if ((method == FLASH_METHOD_RAM_BLOB && algo == NULL) || tgt == NULL) {
         snprintf(s_flash_status.last_error, sizeof(s_flash_status.last_error),
                  "No flash algorithm for chip %s", flash_algo_get_name(s_target_chip));
         return 0;
@@ -187,6 +452,10 @@ static int flash_execute(void) {
         snprintf(s_flash_status.last_error, sizeof(s_flash_status.last_error),
                  "Failed to halt target");
         goto fail;
+    }
+
+    if (method == FLASH_METHOD_STM32F4_REG) {
+        return flash_execute_stm32f4_reg(flash_start, fw_size);
     }
 
     /* Load flash algorithm blob into target RAM */
@@ -273,29 +542,8 @@ static int flash_execute(void) {
     s_flash_status.state = FLASH_STATE_VERIFYING;
     s_flash_status.state_name = "Verifying";
 
-    {
-        uint8_t *verify_buf = (uint8_t *)malloc(page_size);
-        uint8_t *source_buf = (uint8_t *)malloc(page_size);
-        if (verify_buf && source_buf) {
-            offset = 0;
-            while (offset < fw_size) {
-                size_t chunk = fw_size - offset;
-                if (chunk > page_size) chunk = page_size;
-
-                if (fs_read(offset, source_buf, chunk) != ESP_OK) break;
-                if (!swd_read_memory(flash_start + offset, verify_buf, chunk)) break;
-                if (memcmp(source_buf, verify_buf, chunk) != 0) {
-                    snprintf(s_flash_status.last_error, sizeof(s_flash_status.last_error),
-                             "Verification failed at offset %u", (unsigned int)offset);
-                    free(verify_buf);
-                    free(source_buf);
-                    goto fail_uninit;
-                }
-                offset += chunk;
-            }
-        }
-        if (verify_buf) free(verify_buf);
-        if (source_buf) free(source_buf);
+    if (!verify_target_flash(flash_start, fw_size, page_size)) {
+        goto fail_uninit;
     }
 
     /* --- Phase 6: Uninit and finish --- */

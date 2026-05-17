@@ -58,6 +58,16 @@ static const sector_info_t stm32f1_hd_sectors[] = {
     {0x08000000, 0x400},  /* 1KB per sector, 256/512 sectors */
 };
 
+static const sector_info_t gd32f1_xd_sectors[] = {
+    {0x08000000, 0x800},  /* GD32F1 high-capacity parts typically use 2KB pages */
+};
+
+static const sector_info_t stm32f4_sectors[] = {
+    {0x08000000, 0x4000},   /* sectors 0-3: 16KB */
+    {0x08010000, 0x10000},  /* sector 4: 64KB */
+    {0x08020000, 0x20000},  /* sector 5+: 128KB */
+};
+
 /* ---- Flash Algorithm (shared between MD and HD) ---- */
 
 static const program_target_t stm32f1_flash_algo = {
@@ -112,6 +122,81 @@ static target_cfg_t stm32f1_hd_target = {
     .erase_reset        = 1,
 };
 
+static target_cfg_t gd32f1_xd_target = {
+    .version            = 1,
+    .sectors_info       = gd32f1_xd_sectors,
+    .sector_info_length = 1,
+    .flash_regions      = {
+        { .start = 0x08000000, .end = 0x08300000, .flags = 1, .flash_algo = (program_target_t *)&stm32f1_flash_algo },
+    },
+    .ram_regions        = {
+        { .start = 0x20000000, .end = 0x20018000 },
+    },
+    .target_vendor      = "GigaDevice",
+    .target_part_number = "GD32F1 large-density compatible",
+    .erase_reset        = 1,
+};
+
+static target_cfg_t stm32f4_256k_target = {
+    .version            = 1,
+    .sectors_info       = stm32f4_sectors,
+    .sector_info_length = 3,
+    .flash_regions      = {
+        { .start = 0x08000000, .end = 0x08040000, .flags = 1, .flash_algo = NULL },
+    },
+    .ram_regions        = {
+        { .start = 0x20000000, .end = 0x20010000 },
+    },
+    .target_vendor      = "STMicroelectronics/GigaDevice",
+    .target_part_number = "STM32F4/GD32F4 256KB class",
+    .erase_reset        = 1,
+};
+
+static target_cfg_t stm32f4_512k_target = {
+    .version            = 1,
+    .sectors_info       = stm32f4_sectors,
+    .sector_info_length = 3,
+    .flash_regions      = {
+        { .start = 0x08000000, .end = 0x08080000, .flags = 1, .flash_algo = NULL },
+    },
+    .ram_regions        = {
+        { .start = 0x20000000, .end = 0x20020000 },
+    },
+    .target_vendor      = "STMicroelectronics/GigaDevice",
+    .target_part_number = "STM32F4/GD32F4 512KB class",
+    .erase_reset        = 1,
+};
+
+static target_cfg_t stm32f4_1024k_target = {
+    .version            = 1,
+    .sectors_info       = stm32f4_sectors,
+    .sector_info_length = 3,
+    .flash_regions      = {
+        { .start = 0x08000000, .end = 0x08100000, .flags = 1, .flash_algo = NULL },
+    },
+    .ram_regions        = {
+        { .start = 0x20000000, .end = 0x20020000 },
+    },
+    .target_vendor      = "STMicroelectronics/GigaDevice",
+    .target_part_number = "STM32F4/GD32F4 1MB class",
+    .erase_reset        = 1,
+};
+
+static target_cfg_t stm32f4_2048k_target = {
+    .version            = 1,
+    .sectors_info       = stm32f4_sectors,
+    .sector_info_length = 3,
+    .flash_regions      = {
+        { .start = 0x08000000, .end = 0x08200000, .flags = 1, .flash_algo = NULL },
+    },
+    .ram_regions        = {
+        { .start = 0x20000000, .end = 0x20030000 },
+    },
+    .target_vendor      = "STMicroelectronics/GigaDevice",
+    .target_part_number = "STM32F4/GD32F4 2MB class",
+    .erase_reset        = 1,
+};
+
 /* ---- Public API ---- */
 
 target_chip_t flash_algo_detect(uint32_t idcode) {
@@ -136,6 +221,19 @@ target_chip_t flash_algo_detect(uint32_t idcode) {
                 return TARGET_STM32F1_MD;
             case 0x414:  /* STM32F103 high density */
                 return TARGET_STM32F1_HD;
+            case 0x430:  /* GD32F103 extra-large density variants */
+                return TARGET_GD32F1_XD;
+            case 0x423:  /* STM32F401 low/medium density */
+            case 0x433:  /* STM32F401 */
+                return TARGET_STM32F4_256K;
+            case 0x421:  /* STM32F446 */
+            case 0x431:  /* STM32F411 */
+                return TARGET_STM32F4_512K;
+            case 0x413:  /* STM32F405/407/415/417 and compatible GD32F4 */
+                return TARGET_STM32F4_1024K;
+            case 0x419:  /* STM32F42x/43x */
+            case 0x434:  /* STM32F469/479 */
+                return TARGET_STM32F4_2048K;
             default:
                 /* Try as medium density for any other STM32F1 variant */
                 return TARGET_STM32F1_MD;
@@ -148,6 +246,7 @@ const program_target_t *flash_algo_get(target_chip_t chip) {
     switch (chip) {
         case TARGET_STM32F1_MD:
         case TARGET_STM32F1_HD:
+        case TARGET_GD32F1_XD:
             return &stm32f1_flash_algo;
         default:
             return NULL;
@@ -160,8 +259,30 @@ const target_cfg_t *flash_algo_get_target_config(target_chip_t chip) {
             return &stm32f1_md_target;
         case TARGET_STM32F1_HD:
             return &stm32f1_hd_target;
+        case TARGET_GD32F1_XD:
+            return &gd32f1_xd_target;
+        case TARGET_STM32F4_256K:
+            return &stm32f4_256k_target;
+        case TARGET_STM32F4_512K:
+            return &stm32f4_512k_target;
+        case TARGET_STM32F4_1024K:
+            return &stm32f4_1024k_target;
+        case TARGET_STM32F4_2048K:
+            return &stm32f4_2048k_target;
         default:
             return NULL;
+    }
+}
+
+flash_method_t flash_algo_get_method(target_chip_t chip) {
+    switch (chip) {
+        case TARGET_STM32F4_256K:
+        case TARGET_STM32F4_512K:
+        case TARGET_STM32F4_1024K:
+        case TARGET_STM32F4_2048K:
+            return FLASH_METHOD_STM32F4_REG;
+        default:
+            return FLASH_METHOD_RAM_BLOB;
     }
 }
 
@@ -171,6 +292,16 @@ const char *flash_algo_get_name(target_chip_t chip) {
             return "STM32F103C8/CB (Medium Density)";
         case TARGET_STM32F1_HD:
             return "STM32F103RB/RD/RE (High Density)";
+        case TARGET_GD32F1_XD:
+            return "GD32F1 large-density compatible";
+        case TARGET_STM32F4_256K:
+            return "STM32F4/GD32F4 256KB class";
+        case TARGET_STM32F4_512K:
+            return "STM32F4/GD32F4 512KB class";
+        case TARGET_STM32F4_1024K:
+            return "STM32F4/GD32F4 1MB class";
+        case TARGET_STM32F4_2048K:
+            return "STM32F4/GD32F4 2MB class";
         default:
             return "Unknown";
     }
