@@ -20,6 +20,11 @@ extern "C" {
 typedef enum {
     TARGET_STM32F1_MD,      /* STM32F103 中等密度 (64/128KB Flash) */
     TARGET_STM32F1_HD,      /* STM32F103 高密度 (256/512KB Flash) */
+    TARGET_GD32F1_XD,       /* GD32F1 large-density compatible parts */
+    TARGET_STM32F4_256K,    /* STM32F4 / compatible, 256KB class */
+    TARGET_STM32F4_512K,    /* STM32F4 / compatible, 512KB class */
+    TARGET_STM32F4_1024K,   /* STM32F4 / compatible, 1MB class */
+    TARGET_STM32F4_2048K,   /* STM32F4 / compatible, 2MB class */
     TARGET_UNKNOWN,
 } target_chip_t;
 

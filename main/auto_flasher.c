@@ -73,6 +73,19 @@ static target_chip_t detect_target_chip(uint32_t dp_idcode) {
                 return TARGET_STM32F1_MD;
             case 0x414:
                 return TARGET_STM32F1_HD;
+            case 0x430:
+                return TARGET_GD32F1_XD;
+            case 0x423:
+            case 0x433:
+                return TARGET_STM32F4_256K;
+            case 0x421:
+            case 0x431:
+                return TARGET_STM32F4_512K;
+            case 0x413:
+                return TARGET_STM32F4_1024K;
+            case 0x419:
+            case 0x434:
+                return TARGET_STM32F4_2048K;
             default:
                 break;
         }
