@@ -7,4 +7,9 @@ if(CONFIG_USE_WEBSOCKET_DAP)
     list(APPEND COMPONENT_SRCS "websocket_server.c")
 endif()
 
+list(APPEND COMPONENT_SRCS
+    "firmware_store.c"
+    "auto_flasher.c"
+    "http_server.c")
+
 register_component()

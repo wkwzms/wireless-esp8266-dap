@@ -64,6 +64,12 @@ static SWD_CONNECT_TYPE reset_connect = CONNECT_NORMAL;
 
 static DAP_STATE dap_state;
 static uint32_t  soft_reset = SYSRESETREQ;
+
+void swd_set_target_reset(uint8_t asserted)
+{
+    PIN_nRESET_OUT(asserted ? 0U : 1U);
+}
+
 uint32_t target_get_apsel()
 {
 	/* not support */
@@ -742,6 +748,16 @@ uint8_t swd_flash_syscall_exec(const program_syscall_t *sysCallParam, uint32_t e
     }
 
     return 1;
+}
+
+uint8_t swd_flash_load_algo(const program_target_t *algo)
+{
+    if (algo == NULL || algo->algo_blob == NULL || algo->algo_size == 0) {
+        return 0;
+    }
+    return swd_write_memory(algo->algo_start,
+                            (uint8_t *)algo->algo_blob,
+                            algo->algo_size);
 }
 
 // SWD Reset

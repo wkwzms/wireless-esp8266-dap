@@ -54,7 +54,6 @@
 #include "components/DAP/include/gpio_op.h"
 #include "components/DAP/include/spi_switch.h"
 
-
 #ifdef CONFIG_IDF_TARGET_ESP8266
   #include "gpio.h"
   #include "esp8266/include/esp8266/gpio_struct.h"
@@ -99,7 +98,7 @@ This information includes:
   #define CPU_CLOCK 240000000
   // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<240MHz
 #elif defined CONFIG_IDF_TARGET_ESP32C3
-  #define CPU_CLOCK 16000000
+  #define CPU_CLOCK 160000000
   // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<160MHz
 #elif defined CONFIG_IDF_TARGET_ESP32S3
   #define CPU_CLOCK 240000000
@@ -136,7 +135,11 @@ This information includes:
 /// Default communication speed on the Debug Access Port for SWD and JTAG mode.
 /// Used to initialize the default SWD/JTAG clock frequency.
 /// The command \ref DAP_SWJ_Clock can be used to overwrite this default setting.
+#if defined CONFIG_IDF_TARGET_ESP32C3
+#define DAP_DEFAULT_SWJ_CLOCK 400000U ///< Default SWD/JTAG clock frequency in Hz.
+#else
 #define DAP_DEFAULT_SWJ_CLOCK 1000000U ///< Default SWD/JTAG clock frequency in Hz.
+#endif
 // <<<<<<<<<<<<<<<<<<<<<<<<<<<<<1MHz
 
 /// Maximum Package Buffers for Command and Response data.
@@ -651,7 +654,9 @@ __STATIC_FORCEINLINE uint32_t PIN_SWCLK_TCK_IN(void)
  */
 __STATIC_FORCEINLINE void PIN_SWCLK_TCK_SET(void)
 {
-#ifdef SWCLK_SET
+#if defined CONFIG_IDF_TARGET_ESP32C3
+  GPIO_SET_LEVEL_HIGH(PIN_SWCLK);
+#elif defined SWCLK_SET
   SWCLK_SET();
 #else
   GPIO_SET_LEVEL_HIGH(PIN_SWCLK);
@@ -665,7 +670,9 @@ __STATIC_FORCEINLINE void PIN_SWCLK_TCK_SET(void)
  */
 __STATIC_FORCEINLINE void PIN_SWCLK_TCK_CLR(void)
 {
-#ifdef SWCLK_CLR
+#if defined CONFIG_IDF_TARGET_ESP32C3
+  GPIO_SET_LEVEL_LOW(PIN_SWCLK);
+#elif defined SWCLK_CLR
   SWCLK_CLR();
 #else
   GPIO_SET_LEVEL_LOW(PIN_SWCLK);
@@ -682,7 +689,9 @@ __STATIC_FORCEINLINE void PIN_SWCLK_TCK_CLR(void)
 __STATIC_FORCEINLINE uint32_t PIN_SWDIO_TMS_IN(void)
 {
   // Note that we only use mosi in GPIO mode
-#ifdef SWDIO_GET_IN
+#if defined CONFIG_IDF_TARGET_ESP32C3
+  return GPIO_GET_LEVEL(PIN_SWDIO_MOSI);
+#elif defined SWDIO_GET_IN
   return SWDIO_GET_IN();
 #else
   return GPIO_GET_LEVEL(PIN_SWDIO_MOSI);
@@ -696,7 +705,9 @@ __STATIC_FORCEINLINE uint32_t PIN_SWDIO_TMS_IN(void)
  */
 __STATIC_FORCEINLINE void PIN_SWDIO_TMS_SET(void)
 {
-#ifdef SWDIO_SET
+#if defined CONFIG_IDF_TARGET_ESP32C3
+  GPIO_SET_LEVEL_HIGH(PIN_SWDIO_MOSI);
+#elif defined SWDIO_SET
   SWDIO_SET();
 #else
   GPIO_SET_LEVEL_HIGH(PIN_SWDIO_MOSI);
@@ -710,7 +721,9 @@ __STATIC_FORCEINLINE void PIN_SWDIO_TMS_SET(void)
  */
 __STATIC_FORCEINLINE void PIN_SWDIO_TMS_CLR(void)
 {
-#ifdef SWDIO_CLR
+#if defined CONFIG_IDF_TARGET_ESP32C3
+  GPIO_SET_LEVEL_LOW(PIN_SWDIO_MOSI);
+#elif defined SWDIO_CLR
   SWDIO_CLR();
 #else
   GPIO_SET_LEVEL_LOW(PIN_SWDIO_MOSI);
@@ -763,7 +776,8 @@ __STATIC_FORCEINLINE void PIN_SWDIO_OUT_ENABLE(void)
 #elif defined CONFIG_IDF_TARGET_ESP32
   GPIO.enable_w1ts = 0x01 << PIN_SWDIO_MOSI;
 #elif defined CONFIG_IDF_TARGET_ESP32C3
-  SWDIO_OUT_ENABLE();
+  GPIO.enable_w1ts.enable_w1ts = (0x01 << PIN_SWDIO_MOSI);
+  GPIO.pin[PIN_SWDIO_MOSI].pad_driver = 0;
 #elif defined CONFIG_IDF_TARGET_ESP32S3
 #endif
 }
@@ -782,7 +796,7 @@ __STATIC_FORCEINLINE void PIN_SWDIO_OUT_DISABLE(void)
   // Note that the input of esp32 is not always connected.
   GPIO.enable_w1tc = 0x01 << PIN_SWDIO_MOSI;
 #elif defined CONFIG_IDF_TARGET_ESP32C3
-  SWDIO_OUT_DISABLE();
+  GPIO.enable_w1tc.enable_w1tc = (0x01 << PIN_SWDIO_MOSI);
 #elif defined CONFIG_IDF_TARGET_ESP32S3
 #endif
 }

@@ -113,18 +113,6 @@ static void ssid_change() {
     ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_STA, &wifi_config));
 }
 
-static void wait_for_ip() {
-#ifdef CONFIG_EXAMPLE_IPV6
-    uint32_t bits = IPV4_GOTIP_BIT | IPV6_GOTIP_BIT;
-#else
-    uint32_t bits = IPV4_GOTIP_BIT;
-#endif
-
-    os_printf("Waiting for AP connection...\r\n");
-    xEventGroupWaitBits(wifi_event_group, bits, false, true, portMAX_DELAY);
-    os_printf("Connected to AP\r\n");
-}
-
 void wifi_init(void) {
     GPIO_FUNCTION_SET(PIN_LED_WIFI_STATUS);
     GPIO_SET_DIRECTION_NORMAL_OUT(PIN_LED_WIFI_STATUS);
@@ -157,7 +145,5 @@ void wifi_init(void) {
     ESP_ERROR_CHECK(esp_wifi_set_ps(WIFI_PS_NONE));
     ssid_change();
     ESP_ERROR_CHECK(esp_wifi_start());
-
-
-    wait_for_ip();
+    os_printf("WiFi STA started; offline flasher will continue without waiting for AP\r\n");
 }
