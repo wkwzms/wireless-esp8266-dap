@@ -45,16 +45,21 @@ static uint32_t        s_last_idcode   = 0;   /* for 2-step confirm */
 static uint32_t        s_done_idcode   = 0;   /* last flushed target — skip until disconnected */
 static target_chip_t   s_target_chip   = TARGET_UNKNOWN;
 
-#define ARM_SWD_DP_IDCODE    0x1BA01477UL
+#define ARM_SWD_DP_IDCODE_MASK  0x0FFFFFFFUL
+#define ARM_SWD_DP_IDCODE_VALUE 0x0BA01477UL
 #define STM32_DBGMCU_IDCODE  0xE0042000UL
 #define STM32F1_FLASH_SIZE_KB 0x1FFFF7E0UL
+
+static int is_arm_swd_dp_idcode(uint32_t dp_idcode) {
+    return ((dp_idcode & ARM_SWD_DP_IDCODE_MASK) == ARM_SWD_DP_IDCODE_VALUE);
+}
 
 static target_chip_t detect_target_chip(uint32_t dp_idcode) {
     uint32_t dbgmcu_id = 0;
     uint32_t flash_kb = 0;
     uint32_t device_id = 0;
 
-    if (dp_idcode != ARM_SWD_DP_IDCODE) {
+    if (!is_arm_swd_dp_idcode(dp_idcode)) {
         return flash_algo_detect(dp_idcode);
     }
 
